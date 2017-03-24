@@ -18,7 +18,7 @@ import (
 	"strings"
 )
 
-func main() {
+func generate() (doneString string) {
 
 	// Compile regex from first argument.
 	re, _ := regexp.Compile(os.Args[1])
@@ -53,12 +53,22 @@ func main() {
 				Bytes: privASN1,
 			})
 			ioutil.WriteFile("private_key", privBytes, 0400)
-			os.Exit(0)
-
+			doneString = "done"
+			return
 		}
 
 		// If not matching, increase private key exponent and retry.
 		privKey.E = privKey.E + 2
 
 	}
+}
+
+func main() {
+	messages := make(chan string)
+	go func() {
+		for i := 0; i < 10; i++ {
+			messages <- generate()
+		}
+	}()
+	fmt.Println(<-messages)
 }

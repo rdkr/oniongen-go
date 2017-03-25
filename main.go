@@ -15,19 +15,36 @@ import (
 	"io/ioutil"
 	"os"
 	"regexp"
+	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 )
 
-func generate() (doneString string) {
+func save(privKey *rsa.PrivateKey, pubBase32 string) {
 
-	// Compile regex from first argument.
-	re, _ := regexp.Compile(os.Args[1])
-
-	// Generate new random private key.
-	privKey, _ := rsa.GenerateKey(rand.Reader, 1024)
+	// Print address and iteration info.
+	fmt.Printf("%v.onion found on iteration %v\n",
+		strings.ToLower(pubBase32), (privKey.E-65537)/2)
 
 	// Marshall private key to ANS.1 (DER).
 	privASN1 := x509.MarshalPKCS1PrivateKey(privKey)
+
+	// Encode private key as PEM, save to file, and exit.
+	privBytes := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: privASN1,
+	})
+
+	// Write key to file.
+	ioutil.WriteFile("private_key-"+strings.ToLower(pubBase32), privBytes, 0400)
+
+}
+
+func generate(wg *sync.WaitGroup, re *regexp.Regexp) {
+
+	// Generate new random private key.
+	privKey, _ := rsa.GenerateKey(rand.Reader, 1024)
 
 	for {
 
@@ -39,22 +56,10 @@ func generate() (doneString string) {
 		pubSHA1 := sha1.Sum(pubASN1)
 		pubBase32 := base32.StdEncoding.EncodeToString(pubSHA1[:10])
 
-		// If a matching address is found...
+		// If a matching address is found, save key and notify wait group
 		if re.MatchString(pubBase32) == true {
-
-			// Print address and iteration info.
-			fmt.Println(strings.ToLower(pubBase32) + ".onion")
-			fmt.Print("found on iteration ")
-			fmt.Println((privKey.E - 65537) / 2)
-
-			// Encode private key as PEM, save to file, and exit.
-			privBytes := pem.EncodeToMemory(&pem.Block{
-				Type:  "RSA PRIVATE KEY",
-				Bytes: privASN1,
-			})
-			ioutil.WriteFile("private_key", privBytes, 0400)
-			doneString = "done"
-			return
+			save(privKey, pubBase32)
+			wg.Done()
 		}
 
 		// If not matching, increase private key exponent and retry.
@@ -64,11 +69,26 @@ func generate() (doneString string) {
 }
 
 func main() {
-	messages := make(chan string)
-	go func() {
-		for i := 0; i < 10; i++ {
-			messages <- generate()
-		}
-	}()
-	fmt.Println(<-messages)
+
+	// Set runtime to use all available CPUs.
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	// Compile regex from first argument.
+	re, _ := regexp.Compile(os.Args[1])
+
+	// Get the number of desired addreses from second argument.
+	numAddresses, _ := strconv.Atoi(os.Args[2])
+
+	// WaitGroup of size equal to desired number of addresses
+	var wg sync.WaitGroup
+	wg.Add(numAddresses)
+
+	// For each CPU, run a generate goroutine
+	for i := 0; i < runtime.NumCPU(); i++ {
+		go generate(&wg, re)
+	}
+
+	// Exit after the desired number of addresses have been found.
+	wg.Wait()
+
 }

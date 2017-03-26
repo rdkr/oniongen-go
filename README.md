@@ -1,2 +1,2 @@
-# go-onion-gen
-.onion vanity URL generator written in Go
+# oniongen
+v3 .onion vanity URL generator written in Go

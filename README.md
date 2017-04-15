@@ -18,3 +18,7 @@ go run main.go "^TEST" 5
 
     generate 5 onion addresses starting with "test"
 ```
+
+## References
+
+See https://github.com/rdkr/oniongen-c#references

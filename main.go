@@ -11,8 +11,8 @@ import (
 	"strings"
 	"sync"
 
-	"golang.org/x/crypto/ed25519"
-	"golang.org/x/crypto/sha3"
+	"src\crypto/ed25519"
+	"src\crypto/sha3"
 )
 
 func generate(wg *sync.WaitGroup, re *regexp.Regexp) {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"encoding/base32"
 	"fmt"
 	"os"
@@ -11,7 +12,6 @@ import (
 	"strings"
 	"sync"
 
-	"golang.org/x/crypto/ed25519"
 	"golang.org/x/crypto/sha3"
 )
 

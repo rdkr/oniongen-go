@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base32"
 	"fmt"
+	"log"
 	"os"
 	"regexp"
 	"runtime"
@@ -15,12 +16,16 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
-func generate(wg *sync.WaitGroup, re *regexp.Regexp) {
+func generate(wg *sync.WaitGroup, re *regexp.Regexp) error {
 
 	for {
 
 		// Generate key pair
-		publicKey, _, _ := ed25519.GenerateKey(nil)
+		publicKey, _, err := ed25519.GenerateKey(nil)
+		if err != nil {
+			wg.Done()
+			return err
+		}
 
 		// checksum = H(".onion checksum" || pubkey || version)
 		var checksumBytes bytes.Buffer
@@ -39,29 +44,48 @@ func generate(wg *sync.WaitGroup, re *regexp.Regexp) {
 		// If a matching address is found, save key and notify wait group
 		if re.MatchString(onionAddress) == true {
 			fmt.Println(strings.ToLower(onionAddress) + ".onion")
-			wg.Done()
 		}
+
+		wg.Done()
+		return nil
 	}
+
 }
 
 func main() {
+
+	// Check if arguments were provided.
+	if len(os.Args[1]) == 0 || len(os.Args[2]) == 0 {
+		fmt.Print("please provide a <regex> and a <number>")
+		os.Exit(1)
+	}
 
 	// Set runtime to use all available CPUs.
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	// Compile regex from first argument.
-	re, _ := regexp.Compile(os.Args[1])
+	re, err := regexp.Compile(os.Args[1])
+	if err != nil {
+		log.Fatalf("error compiling regex: %v", err)
+	}
 
 	// Get the number of desired addreses from second argument.
-	numAddresses, _ := strconv.Atoi(os.Args[2])
+	numAddresses, err := strconv.Atoi(os.Args[2])
+	if err != nil {
+		log.Fatalf("error converting string to int: %v", err)
+	}
 
-	// WaitGroup of size equal to desired number of addresses
+	// WaitGroup of size equal to desired number of addresses.
 	var wg sync.WaitGroup
 	wg.Add(numAddresses)
 
-	// For each CPU, run a generate goroutine
+	// For each CPU, run a generate goroutine.
+	errChan := make(chan error, 1)
 	for i := 0; i < runtime.NumCPU(); i++ {
-		go generate(&wg, re)
+		go func() { errChan <- generate(&wg, re) }()
+	}
+	if err = <-errChan; err != nil {
+		log.Fatalf("error generating onion address: %v", err)
 	}
 
 	// Exit after the desired number of addresses have been found.

@@ -21,7 +21,7 @@ func generate(wg *sync.WaitGroup, re *regexp.Regexp) {
 
 	for {
 
-		publicKey, privateKey, err := ed25519.GenerateKey(nil)
+		publicKey, secretKey, err := ed25519.GenerateKey(nil)
 		checkErr(err)
 
 		onionAddress := encodePublicKey(publicKey)
@@ -29,7 +29,7 @@ func generate(wg *sync.WaitGroup, re *regexp.Regexp) {
 		// If a matching address is found, save key and notify wait group
 		if re.MatchString(onionAddress) == true {
 			fmt.Println(onionAddress)
-			save(onionAddress, publicKey, expandPrivateKey(privateKey))
+			save(onionAddress, publicKey, expandSecretKey(secretKey))
 			wg.Done()
 		}
 	}
@@ -37,9 +37,9 @@ func generate(wg *sync.WaitGroup, re *regexp.Regexp) {
 
 // https://github.com/cathugger/mkp224o/blob/af5a7cfe122ba62e819b92c8b5a662151a284c69/ed25519/ed25519.h#L153-L161
 // https://github.com/torproject/torspec/blob/12271f0e6db00dee9600425b2de063e02f19c1ee/rend-spec-v3.txt#L2268-L2327 ??
-func expandPrivateKey(privateKey ed25519.PrivateKey) [64]byte {
+func expandSecretKey(secretKey ed25519.PrivateKey) [64]byte {
 
-	hash := sha512.Sum512(privateKey[:32])
+	hash := sha512.Sum512(secretKey[:32])
 	hash[0] &= 248
 	hash[31] &= 127
 	hash[31] |= 64
@@ -68,11 +68,11 @@ func encodePublicKey(publicKey ed25519.PublicKey) string {
 
 }
 
-func save(onionAddress string, publicKey ed25519.PublicKey, privateKey [64]byte) {
+func save(onionAddress string, publicKey ed25519.PublicKey, secretKey [64]byte) {
 	os.MkdirAll(onionAddress, 0700)
 
-	privateKeyFile := append([]byte("== ed25519v1-secret: type0 ==\x00\x00\x00"), privateKey[:]...)
-	checkErr(ioutil.WriteFile(onionAddress+"/hs_ed25519_secret_key", privateKeyFile, 0600))
+	secretKeyFile := append([]byte("== ed25519v1-secret: type0 ==\x00\x00\x00"), secretKey[:]...)
+	checkErr(ioutil.WriteFile(onionAddress+"/hs_ed25519_secret_key", secretKeyFile, 0600))
 
 	publicKeyFile := append([]byte("== ed25519v1-public: type0 ==\x00\x00\x00"), []byte{0x00, 0x00, 0x00}...)
 	checkErr(ioutil.WriteFile(onionAddress+"/hs_ed25519_public_key", publicKeyFile, 0600))

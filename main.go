@@ -35,8 +35,6 @@ func generate(wg *sync.WaitGroup, re *regexp.Regexp) {
 	}
 }
 
-// https://github.com/cathugger/mkp224o/blob/af5a7cfe122ba62e819b92c8b5a662151a284c69/ed25519/ed25519.h#L153-L161
-// https://github.com/torproject/torspec/blob/12271f0e6db00dee9600425b2de063e02f19c1ee/rend-spec-v3.txt#L2268-L2327 ??
 func expandSecretKey(secretKey ed25519.PrivateKey) [64]byte {
 
 	hash := sha512.Sum512(secretKey[:32])
@@ -47,7 +45,6 @@ func expandSecretKey(secretKey ed25519.PrivateKey) [64]byte {
 
 }
 
-// https://github.com/torproject/torspec/blob/12271f0e6db00dee9600425b2de063e02f19c1ee/rend-spec-v3.txt#L2136-L2158
 func encodePublicKey(publicKey ed25519.PublicKey) string {
 
 	// checksum = H(".onion checksum" || pubkey || version)

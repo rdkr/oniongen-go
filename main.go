@@ -74,7 +74,7 @@ func save(onionAddress string, publicKey ed25519.PublicKey, secretKey [64]byte) 
 	publicKeyFile := append([]byte("== ed25519v1-public: type0 ==\x00\x00\x00"), publicKey...)
 	checkErr(ioutil.WriteFile(onionAddress+"/hs_ed25519_public_key", publicKeyFile, 0600))
 
-	checkErr(ioutil.WriteFile(onionAddress+"/hostname", []byte(onionAddress+".onion"), 0600))
+	checkErr(ioutil.WriteFile(onionAddress+"/hostname", []byte(onionAddress+".onion\n"), 0600))
 }
 
 func checkErr(err error) {

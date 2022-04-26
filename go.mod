@@ -1,4 +1,4 @@
-module oniongen-go
+module github.com/rdkr/oniongen-go
 
 go 1.14
 

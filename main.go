@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 
 	"golang.org/x/crypto/sha3"
@@ -19,7 +20,7 @@ const b32Lower = "abcdefghijklmnopqrstuvwxyz234567"
 
 var b32Enc = base32.NewEncoding(b32Lower).WithPadding(base32.NoPadding)
 
-func generate(wg *sync.WaitGroup, re *regexp.Regexp) {
+func generate(wg *sync.WaitGroup, prefix string) {
 	for {
 		publicKey, secretKey, err := ed25519.GenerateKey(nil)
 		checkErr(err)
@@ -27,7 +28,7 @@ func generate(wg *sync.WaitGroup, re *regexp.Regexp) {
 		onionAddress := encodePublicKey(publicKey)
 
 		// If a matching address is found, save key and notify wait group
-		if re.MatchString(onionAddress) == true {
+		if strings.HasPrefix(onionAddress, prefix) {
 			fmt.Println(onionAddress)
 			save(onionAddress, publicKey, expandSecretKey(secretKey))
 			wg.Done()
@@ -85,8 +86,11 @@ func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	prefix := os.Args[1]
-	// Compile regex from first argument.
-	re, _ := regexp.Compile(prefix)
+	validPrefix, _ := regexp.MatchString(`^[a-z2-9]*$`, prefix)
+	if !validPrefix {
+		fmt.Fprintf(os.Stderr, "Invalid prefix: onion addresses can't contain 0 or 1 to avoid confusion with o and l\n")
+		os.Exit(1)
+	}
 
 	// Get the number of desired addresses from second argument.
 	numAddresses, _ := strconv.Atoi(os.Args[2])
@@ -97,7 +101,7 @@ func main() {
 
 	// For each CPU, run a generate goroutine
 	for i := 0; i < runtime.NumCPU(); i++ {
-		go generate(&wg, re)
+		go generate(&wg, prefix)
 	}
 
 	// Exit after the desired number of addresses have been found.

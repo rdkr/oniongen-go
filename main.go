@@ -10,11 +10,14 @@ import (
 	"regexp"
 	"runtime"
 	"strconv"
-	"strings"
 	"sync"
 
 	"golang.org/x/crypto/sha3"
 )
+
+const b32Lower = "abcdefghijklmnopqrstuvwxyz234567"
+
+var b32Enc = base32.NewEncoding(b32Lower).WithPadding(base32.NoPadding)
 
 func generate(wg *sync.WaitGroup, re *regexp.Regexp) {
 	for {
@@ -54,9 +57,9 @@ func encodePublicKey(publicKey ed25519.PublicKey) string {
 	onionAddressBytes.Write(publicKey)
 	onionAddressBytes.Write(checksum[:2])
 	onionAddressBytes.Write([]byte{0x03})
-	onionAddress := base32.StdEncoding.EncodeToString(onionAddressBytes.Bytes())
+	onionAddress := b32Enc.EncodeToString(onionAddressBytes.Bytes())
 
-	return strings.ToLower(onionAddress)
+	return onionAddress
 }
 
 func save(onionAddress string, publicKey ed25519.PublicKey, secretKey [64]byte) {
@@ -81,8 +84,9 @@ func main() {
 	// Set runtime to use all available CPUs.
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
+	prefix := os.Args[1]
 	// Compile regex from first argument.
-	re, _ := regexp.Compile(os.Args[1])
+	re, _ := regexp.Compile(prefix)
 
 	// Get the number of desired addresses from second argument.
 	numAddresses, _ := strconv.Atoi(os.Args[2])

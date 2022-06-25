@@ -25,10 +25,10 @@ func generate(wg *sync.WaitGroup, prefix string) {
 		publicKey, secretKey, err := ed25519.GenerateKey(nil)
 		checkErr(err)
 
-		onionAddress := encodePublicKey(publicKey)
-
+		publicKeyB32 := b32Enc.EncodeToString(publicKey)
 		// If a matching address is found, save key and notify wait group
-		if strings.HasPrefix(onionAddress, prefix) {
+		if strings.HasPrefix(publicKeyB32, prefix) {
+			onionAddress := encodePublicKey(publicKey)
 			fmt.Println(onionAddress)
 			save(onionAddress, publicKey, expandSecretKey(secretKey))
 			wg.Done()

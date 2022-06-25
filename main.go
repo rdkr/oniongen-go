@@ -20,12 +20,14 @@ const b32Lower = "abcdefghijklmnopqrstuvwxyz234567"
 
 var b32Enc = base32.NewEncoding(b32Lower).WithPadding(base32.NoPadding)
 
-func generate(wg *sync.WaitGroup, prefix string) {
+func generate(wg *sync.WaitGroup, prefix string, prefixDecodedLen int) {
 	for {
 		publicKey, secretKey, err := ed25519.GenerateKey(nil)
 		checkErr(err)
 
-		publicKeyB32 := b32Enc.EncodeToString(publicKey)
+		// Match the public key with prefix.
+		// No need to encode all PK to B32 if prefix shorter
+		publicKeyB32 := b32Enc.EncodeToString(publicKey[0:prefixDecodedLen])
 		// If a matching address is found, save key and notify wait group
 		if strings.HasPrefix(publicKeyB32, prefix) {
 			onionAddress := encodePublicKey(publicKey)
@@ -92,6 +94,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	prefixLen := len(prefix)
+	prefixDecodedLen := b32Enc.DecodedLen(prefixLen)
+	// Same DecodedLen(prefix) but without rounding to floor
+	prefixDecodedLenRatio := float64(prefixLen) * 5.0 / 8.0
+	// if there is some division remainder
+	if prefixDecodedLenRatio > float64(prefixDecodedLen) {
+		// 8 bytes encoded into 5 chars. We must add them all because don't know which byte changes a char
+		prefixDecodedLen += 8
+	}
+	if prefixDecodedLen > 32 {
+		prefixDecodedLen = 32
+	}
+
 	// Get the number of desired addresses from second argument.
 	numAddresses, _ := strconv.Atoi(os.Args[2])
 
@@ -101,7 +116,7 @@ func main() {
 
 	// For each CPU, run a generate goroutine
 	for i := 0; i < runtime.NumCPU(); i++ {
-		go generate(&wg, prefix)
+		go generate(&wg, prefix, prefixDecodedLen)
 	}
 
 	// Exit after the desired number of addresses have been found.

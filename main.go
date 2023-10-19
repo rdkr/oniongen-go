@@ -29,7 +29,7 @@ func generate(wg *sync.WaitGroup, re *regexp.Regexp) {
 		// If a matching address is found, save key and notify wait group
 		if re.MatchString(onionAddress) == true {
 			fmt.Println(onionAddress)
-			save(onionAddress, publicKey, expandSecretKey(secretKey))
+			save(onionAddress, expandSecretKey(secretKey))
 			wg.Done()
 		}
 	}
@@ -65,16 +65,11 @@ func encodePublicKey(publicKey ed25519.PublicKey) string {
 
 }
 
-func save(onionAddress string, publicKey ed25519.PublicKey, secretKey [64]byte) {
+func save(onionAddress string, secretKey [64]byte) {
 	os.MkdirAll(onionAddress, 0700)
 
 	secretKeyFile := append([]byte("== ed25519v1-secret: type0 ==\x00\x00\x00"), secretKey[:]...)
 	checkErr(ioutil.WriteFile(onionAddress+"/hs_ed25519_secret_key", secretKeyFile, 0600))
-
-	publicKeyFile := append([]byte("== ed25519v1-public: type0 ==\x00\x00\x00"), publicKey...)
-	checkErr(ioutil.WriteFile(onionAddress+"/hs_ed25519_public_key", publicKeyFile, 0600))
-
-	checkErr(ioutil.WriteFile(onionAddress+"/hostname", []byte(onionAddress+".onion\n"), 0600))
 }
 
 func checkErr(err error) {

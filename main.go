@@ -6,7 +6,6 @@ import (
 	"crypto/sha512"
 	"encoding/base32"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"regexp"
 	"runtime"
@@ -17,17 +16,21 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
-func generate(wg *sync.WaitGroup, re *regexp.Regexp) {
+const b32Lower = "abcdefghijklmnopqrstuvwxyz234567"
 
+var b32Enc = base32.NewEncoding(b32Lower).WithPadding(base32.NoPadding)
+
+func generate(wg *sync.WaitGroup, prefix string, prefixDecodedLen int) {
 	for {
-
 		publicKey, secretKey, err := ed25519.GenerateKey(nil)
 		checkErr(err)
 
-		onionAddress := encodePublicKey(publicKey)
-
+		// Match the public key with prefix.
+		// No need to encode all PK to B32 if prefix shorter
+		publicKeyB32 := b32Enc.EncodeToString(publicKey[0:prefixDecodedLen])
 		// If a matching address is found, save key and notify wait group
-		if re.MatchString(onionAddress) == true {
+		if strings.HasPrefix(publicKeyB32, prefix) {
+			onionAddress := encodePublicKey(publicKey)
 			fmt.Println(onionAddress)
 			save(onionAddress, publicKey, expandSecretKey(secretKey))
 			wg.Done()
@@ -36,45 +39,42 @@ func generate(wg *sync.WaitGroup, re *regexp.Regexp) {
 }
 
 func expandSecretKey(secretKey ed25519.PrivateKey) [64]byte {
-
 	hash := sha512.Sum512(secretKey[:32])
+	// clamp the blinding factor 'h' according to the ed25519 spec
 	hash[0] &= 248
 	hash[31] &= 127
 	hash[31] |= 64
 	return hash
-
 }
 
 func encodePublicKey(publicKey ed25519.PublicKey) string {
-
 	// checksum = H(".onion checksum" || pubkey || version)
 	var checksumBytes bytes.Buffer
 	checksumBytes.Write([]byte(".onion checksum"))
-	checksumBytes.Write([]byte(publicKey))
+	checksumBytes.Write(publicKey)
 	checksumBytes.Write([]byte{0x03})
 	checksum := sha3.Sum256(checksumBytes.Bytes())
 
 	// onion_address = base32(pubkey || checksum || version)
 	var onionAddressBytes bytes.Buffer
-	onionAddressBytes.Write([]byte(publicKey))
-	onionAddressBytes.Write([]byte(checksum[:2]))
+	onionAddressBytes.Write(publicKey)
+	onionAddressBytes.Write(checksum[:2])
 	onionAddressBytes.Write([]byte{0x03})
-	onionAddress := base32.StdEncoding.EncodeToString(onionAddressBytes.Bytes())
+	onionAddress := b32Enc.EncodeToString(onionAddressBytes.Bytes())
 
-	return strings.ToLower(onionAddress)
-
+	return onionAddress
 }
 
 func save(onionAddress string, publicKey ed25519.PublicKey, secretKey [64]byte) {
-	os.MkdirAll(onionAddress, 0700)
+	checkErr(os.MkdirAll(onionAddress, 0700))
 
 	secretKeyFile := append([]byte("== ed25519v1-secret: type0 ==\x00\x00\x00"), secretKey[:]...)
-	checkErr(ioutil.WriteFile(onionAddress+"/hs_ed25519_secret_key", secretKeyFile, 0600))
+	checkErr(os.WriteFile(onionAddress+"/hs_ed25519_secret_key", secretKeyFile, 0600))
 
 	publicKeyFile := append([]byte("== ed25519v1-public: type0 ==\x00\x00\x00"), publicKey...)
-	checkErr(ioutil.WriteFile(onionAddress+"/hs_ed25519_public_key", publicKeyFile, 0600))
+	checkErr(os.WriteFile(onionAddress+"/hs_ed25519_public_key", publicKeyFile, 0600))
 
-	checkErr(ioutil.WriteFile(onionAddress+"/hostname", []byte(onionAddress+".onion\n"), 0600))
+	checkErr(os.WriteFile(onionAddress+"/hostname", []byte(onionAddress+".onion\n"), 0600))
 }
 
 func checkErr(err error) {
@@ -84,14 +84,30 @@ func checkErr(err error) {
 }
 
 func main() {
-
 	// Set runtime to use all available CPUs.
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	// Compile regex from first argument.
-	re, _ := regexp.Compile(os.Args[1])
+	prefix := os.Args[1]
+	validPrefix, _ := regexp.MatchString(`^[a-z2-9]*$`, prefix)
+	if !validPrefix {
+		fmt.Fprintf(os.Stderr, "Invalid prefix: onion addresses can't contain 0 or 1 to avoid confusion with o and l\n")
+		os.Exit(1)
+	}
 
-	// Get the number of desired addreses from second argument.
+	prefixLen := len(prefix)
+	prefixDecodedLen := b32Enc.DecodedLen(prefixLen)
+	// Same DecodedLen(prefix) but without rounding to floor
+	prefixDecodedLenRatio := float64(prefixLen) * 5.0 / 8.0
+	// if there is some division remainder
+	if prefixDecodedLenRatio > float64(prefixDecodedLen) {
+		// 8 bytes encoded into 5 chars. We must add them all because don't know which byte changes a char
+		prefixDecodedLen += 8
+	}
+	if prefixDecodedLen > 32 {
+		prefixDecodedLen = 32
+	}
+
+	// Get the number of desired addresses from second argument.
 	numAddresses, _ := strconv.Atoi(os.Args[2])
 
 	// WaitGroup of size equal to desired number of addresses
@@ -100,10 +116,9 @@ func main() {
 
 	// For each CPU, run a generate goroutine
 	for i := 0; i < runtime.NumCPU(); i++ {
-		go generate(&wg, re)
+		go generate(&wg, prefix, prefixDecodedLen)
 	}
 
 	// Exit after the desired number of addresses have been found.
 	wg.Wait()
-
 }
